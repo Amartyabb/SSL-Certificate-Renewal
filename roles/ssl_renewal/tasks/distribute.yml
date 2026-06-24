@@ -1,0 +1,27 @@
+# roles/ssl_renewal/tasks/distribute.yml - Copy certs to load balancers
+---
+- name: Fetch renewed certificates to control node
+  fetch:
+    src: "{{ ssl_cert_dir }}/{{ item.0.name }}/{{ item.1 }}"
+    dest: "/tmp/certs/{{ item.0.name }}/"
+    flat: yes
+  loop: "{{ ssl_domains | product(['fullchain.pem', 'privkey.pem']) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}/{{ item.1 }}"
+  delegate_to: "{{ ssl_renewal_server }}"
+  run_once: yes
+
+- name: Create certificate directories on load balancers
+  file:
+    path: "/etc/ssl/{{ item.name }}"
+    state: directory
+    mode: '0750'
+  loop: "{{ ssl_domains }}"
+
+- name: Deploy certificates to load balancers
+  copy:
+    src: "/tmp/certs/{{ item.0.name }}/{{ item.1 }}"
+    dest: "/etc/ssl/{{ item.0.name }}/{{ item.1 }}"
+    mode: '0600'
+  loop: "{{ ssl_domains | product(['fullchain.pem', 'privkey.pem']) | list }}"
+  notify: reload nginx
