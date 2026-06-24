@@ -1,0 +1,42 @@
+# Task to deploy a certificate monitoring script
+- name: Deploy certificate monitoring script
+  copy:
+    content: |
+      #!/bin/bash
+      # Check all certificates and report expiration status
+      WARN_DAYS=14
+      EXIT_CODE=0
+
+      for domain_dir in {{ ssl_cert_dir }}/*/; do
+        domain=$(basename "$domain_dir")
+        cert="$domain_dir/fullchain.pem"
+
+        if [ -f "$cert" ]; then
+          expiry=$(openssl x509 -enddate -noout -in "$cert" | cut -d= -f2)
+          expiry_epoch=$(date -d "$expiry" +%s)
+          now_epoch=$(date +%s)
+          days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+
+          if [ "$days_left" -lt "$WARN_DAYS" ]; then
+            echo "CRITICAL: $domain expires in $days_left days ($expiry)"
+            EXIT_CODE=2
+          elif [ "$days_left" -lt 30 ]; then
+            echo "WARNING: $domain expires in $days_left days ($expiry)"
+            [ "$EXIT_CODE" -lt 1 ] && EXIT_CODE=1
+          else
+            echo "OK: $domain expires in $days_left days"
+          fi
+        fi
+      done
+
+      exit $EXIT_CODE
+    dest: /usr/local/bin/check-ssl-certs.sh
+    mode: '0755'
+
+- name: Schedule daily certificate monitoring
+  cron:
+    name: "SSL certificate expiration check"
+    minute: "0"
+    hour: "8"
+    job: "/usr/local/bin/check-ssl-certs.sh | logger -t ssl-check"
+    user: root
