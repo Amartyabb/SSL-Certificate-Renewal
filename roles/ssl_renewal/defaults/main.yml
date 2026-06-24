@@ -1,0 +1,18 @@
+ssl_email: admin@example.com
+ssl_cert_dir: /etc/letsencrypt/live
+ssl_renewal_threshold: 30
+
+ssl_domains:
+  - name: example.com
+    sans:
+      - www.example.com
+      - api.example.com
+    webroot: /var/www/html
+    services:
+      - nginx
+  - name: mail.example.com
+    sans: []
+    webroot: /var/www/html
+    services:
+      - postfix
+      - dovecot
