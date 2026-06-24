@@ -1,0 +1,11 @@
+---
+- name: reload affected services
+  systemd:
+    name: "{{ item }}"
+    state: reloaded
+  loop: "{{ ssl_domains | map(attribute='services') | flatten | unique }}"
+
+- name: reload nginx
+  systemd:
+    name: nginx
+    state: reloaded
