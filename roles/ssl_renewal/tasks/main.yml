@@ -1,0 +1,68 @@
+# Main Tasks
+
+- name: Install certbot and plugins
+  apt:
+    name:
+      - certbot
+      - python3-certbot-nginx
+    state: present
+    update_cache: yes
+
+- name: Check certificate expiration dates
+  command: >
+    openssl x509 -enddate -noout
+    -in {{ ssl_cert_dir }}/{{ item.name }}/fullchain.pem
+  loop: "{{ ssl_domains }}"
+  register: cert_expiry
+  changed_when: false
+  ignore_errors: yes
+
+- name: Identify certificates needing renewal
+  set_fact:
+    renewal_needed: "{{ renewal_needed | default([]) + [item.item] }}"
+  loop: "{{ cert_expiry.results }}"
+  when: item.failed or (item.stdout is defined and
+    ((item.stdout | regex_replace('notAfter=', '') | to_datetime('%b %d %H:%M:%S %Y %Z'))
+     - (ansible_date_time.iso8601[:10] | to_datetime('%Y-%m-%d'))).days < ssl_renewal_threshold)
+
+- name: Display certificates that need renewal
+  debug:
+    msg: "Certificate for {{ item.name }} needs renewal"
+  loop: "{{ renewal_needed | default([]) }}"
+
+- name: Request or renew certificates
+  command: >
+    certbot certonly --webroot
+    -w {{ item.webroot }}
+    -d {{ item.name }}
+    {% for san in item.sans %}
+    -d {{ san }}
+    {% endfor %}
+    --non-interactive --agree-tos
+    --email {{ ssl_email }}
+    --force-renewal
+  loop: "{{ renewal_needed | default([]) }}"
+  register: renewal_result
+  notify: reload affected services
+
+- name: Verify renewed certificates
+  command: >
+    openssl x509 -subject -enddate -noout
+    -in {{ ssl_cert_dir }}/{{ item.name }}/fullchain.pem
+  loop: "{{ renewal_needed | default([]) }}"
+  register: verify_result
+  changed_when: false
+
+- name: Display renewal verification
+  debug:
+    msg: "{{ item.stdout_lines }}"
+  loop: "{{ verify_result.results | default([]) }}"
+
+- name: Set up automatic renewal via cron
+  cron:
+    name: "Certbot auto-renewal"
+    minute: "0"
+    hour: "3"
+    weekday: "1"
+    job: "certbot renew --quiet --deploy-hook 'systemctl reload {{ ssl_domains | map(attribute='services') | flatten | unique | join(' ') }}'"
+    user: root
