@@ -1,0 +1,7 @@
+---
+- name: S4PCE Post Installation Validation
+  hosts: web_servers
+  become: "{{ validation_become | default(false) }}"
+
+  roles:
+    - system_validation

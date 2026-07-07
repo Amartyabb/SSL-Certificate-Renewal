@@ -1,0 +1,51 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for roles/system_validation
+
+- name: Display operating system
+  debug:
+    msg: "Running validation on {{ ansible_facts['system'] }}"
+
+
+- name: Check disk usage
+  shell: df -h /
+  register: disk_usage
+  changed_when: false
+
+- name: Report disk check completion
+  debug:
+    msg: "INFO - Disk usage check completed"
+
+
+# Memory validation, uses operating system sepsific commands
+- name: Check memory usage on Linux
+  shell: free -m
+  register: memory_usage
+  changed_when: false
+  when: ansible_facts["system"] == "Linux"
+
+- name: Check memory usage on macOS
+  shell: vm_stat
+  register: memory_usage_macos
+  changed_when: false
+  when: ansible_facts["system"] == "Darwin"
+
+- name: Display Linux memory validation result
+  debug:
+    msg: "PASS - Linux memory check completed"
+  when: ansible_facts["system"] == "Linux"
+
+- name: Display macOS memory validation result
+  debug:
+    msg: "PASS - macOS memory check completed"
+  when: ansible_facts["system"] == "Darwin"
+
+
+- name: Check hostname
+  command: hostname
+  register: hostname_result
+  changed_when: false
+
+- name: Display hostname
+  debug:
+    msg: "PASS - Hostname detected: {{ hostname_result.stdout }}"
